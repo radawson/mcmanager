@@ -142,12 +142,13 @@ def cmd_outdated(args) -> int:
         src = source_for(name, sources)
         if src.kind == "modrinth" and src.id:
             try:
-                cand = updates.modrinth_latest(src.id, mc)
+                cand = updates.modrinth_latest(src.id, mc, stable_only=not args.pre)
             except updates.SourceError as exc:
                 rows.append([name, installed, "-", f"modrinth error: {exc}"])
                 continue
             if cand is None:
-                rows.append([name, installed, "-", f"no {mc} build on modrinth"])
+                kind = "build" if args.pre else "stable build"
+                rows.append([name, installed, "-", f"no {mc} {kind} on modrinth"])
             elif updates.is_newer(cand.version_number, installed):
                 rows.append([name, installed, cand.version_number, "UPDATE AVAILABLE"])
                 available += 1
@@ -227,14 +228,14 @@ def cmd_update(args) -> int:
                 return 1
             continue
         try:
-            cand = updates.modrinth_latest(src.id, mc)
+            cand = updates.modrinth_latest(src.id, mc, stable_only=not args.pre)
         except updates.SourceError as exc:
             print(f"  {name}: {exc}", file=sys.stderr)
             if not args.all:
                 return 1
             continue
         if cand is None:
-            print(f"  {name}: no build for MC {mc} on Modrinth", file=sys.stderr)
+            print(f"  {name}: no {'' if args.pre else 'stable '}build for MC {mc} on Modrinth", file=sys.stderr)
             continue
         if not args.force and not updates.is_newer(cand.version_number, m.version or ""):
             if not args.all:
@@ -273,12 +274,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_doc.set_defaults(func=cmd_doctor)
 
     p_out = plsub.add_parser("outdated", help="check installed plugins against Modrinth for the server MC version")
+    p_out.add_argument("--pre", action="store_true", help="include alpha/beta pre-releases")
     p_out.set_defaults(func=cmd_outdated)
 
     p_upd = plsub.add_parser("update", help="download+backup+stage a plugin update into the update/ folder")
     p_upd.add_argument("name", nargs="?", help="plugin name (omit with --all)")
     p_upd.add_argument("--all", action="store_true", help="update every Modrinth-sourced plugin that's outdated")
     p_upd.add_argument("--force", action="store_true", help="stage even if not detected as newer")
+    p_upd.add_argument("--pre", action="store_true", help="include alpha/beta pre-releases")
     p_upd.add_argument("--dry-run", action="store_true", help="show what would happen without downloading")
     p_upd.set_defaults(func=cmd_update)
 

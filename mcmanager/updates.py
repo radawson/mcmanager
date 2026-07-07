@@ -66,9 +66,11 @@ def is_newer(latest: str, installed: str) -> bool:
         return normalize_version(latest) != normalize_version(installed)
 
 
-def modrinth_latest(slug: str, mc_version: str, loaders=_DEFAULT_LOADERS) -> Candidate | None:
-    """Newest Modrinth version of `slug` compatible with `mc_version`, or None if the
-    project has no build for that MC version."""
+def modrinth_latest(slug: str, mc_version: str, loaders=_DEFAULT_LOADERS,
+                    stable_only: bool = True) -> Candidate | None:
+    """Newest Modrinth version of `slug` compatible with `mc_version`. With
+    `stable_only` (default), only release builds are considered (alpha/beta
+    pre-releases are ignored); returns None if there's no matching build."""
     query = urllib.parse.urlencode({
         "loaders": json.dumps(list(loaders)),
         "game_versions": json.dumps([mc_version]),
@@ -76,6 +78,10 @@ def modrinth_latest(slug: str, mc_version: str, loaders=_DEFAULT_LOADERS) -> Can
     versions = _get_json(f"{_MODRINTH}/project/{slug}/version?{query}")
     if not versions:
         return None
+    if stable_only:
+        versions = [v for v in versions if v.get("version_type") == "release"]
+        if not versions:
+            return None
     # Newest first by publish date (don't rely on server ordering).
     versions.sort(key=lambda v: v.get("date_published", ""), reverse=True)
     top = versions[0]
