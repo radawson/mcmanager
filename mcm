@@ -1,0 +1,5 @@
+#!/bin/bash
+# mcmanager launcher — runs the package with the repo dir on sys.path so it
+# works from a git checkout without an install step.
+DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+cd "$DIR" && exec python3 -m mcmanager "$@"

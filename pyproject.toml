@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcmanager"
+version = "0.1.0"
+description = "Management tooling for a PaperMC Minecraft server"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Rick Dawson" }]
+dependencies = ["PyYAML>=6.0"]
+
+[project.urls]
+Homepage = "https://github.com/radawson/mcmanager"
+
+[project.scripts]
+mcm = "mcmanager.cli:main"
+
+[tool.setuptools]
+packages = ["mcmanager"]
