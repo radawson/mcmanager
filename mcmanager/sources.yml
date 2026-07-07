@@ -1,0 +1,52 @@
+# Update sources for installed plugins, keyed by the plugin name in plugin.yml.
+#
+# kind:
+#   modrinth - auto-checkable/updatable via the Modrinth API (id = project slug)
+#   github   - release source (id = "owner/repo"); reported, not auto-updated yet
+#   hangar   - PaperMC Hangar (id = "owner/slug"); reported, not auto-updated yet
+#   spigot   - SpigotMC (Cloudflare-gated); manual download only (id = resource id)
+#   local    - radawson's own plugins, managed via git/gradle (not an update source)
+#   manual   - update by hand / bundled with another plugin
+#
+# Edit freely: add a plugin, fix a slug, or change a kind.
+
+plugins:
+  # --- Modrinth (auto-checkable) ---
+  FastAsyncWorldEdit: { kind: modrinth, id: fastasyncworldedit }
+  WorldGuard:         { kind: modrinth, id: worldguard }
+  WorldEdit:          { kind: modrinth, id: worldedit }
+  CoreProtect:        { kind: modrinth, id: coreprotect }
+  LuckPerms:          { kind: modrinth, id: luckperms }
+  Multiverse-Core:    { kind: modrinth, id: multiverse-core }
+  BlueMap:            { kind: modrinth, id: bluemap }
+  Essentials:         { kind: modrinth, id: essentialsx }
+  mcMMO:              { kind: github, id: "nossr50/mcMMO" }
+  Bolt:               { kind: modrinth, id: bolt }
+
+  # --- EssentialsX modules: shipped together with the EssentialsX release ---
+  EssentialsChat:      { kind: manual, note: "part of EssentialsX - update with the EssentialsX release" }
+  EssentialsSpawn:     { kind: manual, note: "part of EssentialsX" }
+  EssentialsAntiBuild: { kind: manual, note: "part of EssentialsX" }
+  EssentialsGeoIP:     { kind: manual, note: "part of EssentialsX" }
+
+  # --- GitHub / Hangar (reported; auto-update TBD) ---
+  ProtocolLib: { kind: github, id: dmulloy2/ProtocolLib }
+  CraftBook5:  { kind: hangar, id: EngineHub/CraftBook, note: "no 26.x build yet" }
+
+  # --- SpigotMC (Cloudflare-gated: download by hand) ---
+  CMILib:              { kind: spigot, id: "87610", note: "download manually" }
+  Jobs:                { kind: spigot, id: "4216",  note: "Jobs Reborn" }
+  PremiumVanish:       { kind: spigot, note: "premium resource" }
+  AlwaysOnline:        { kind: spigot, note: "no confirmed 26.x build" }
+  ScrollTeleportation: { kind: spigot }
+  ServiceIO:           { kind: modrinth, id: MNPyHOe7 }
+
+  # --- radawson's own plugins (built from source; not an update source) ---
+  Villages:       { kind: local }
+  Vampire:        { kind: local }
+  Werewolf:       { kind: local }
+  Shopkeepers:    { kind: local }
+  BattleArena:    { kind: local }
+  HyperConomy:    { kind: local }
+  CoinOfTheRealm: { kind: local }
+  Bookcase:       { kind: local }

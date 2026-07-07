@@ -3,12 +3,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
+import tempfile
+import zipfile
+from datetime import datetime, timezone
+from pathlib import Path
 
-from . import __version__
-from .config import plugins_dir
+from . import __version__, updates
+from .config import backup_dir, plugins_dir, server_mc_version, update_dir
 from .jarmeta import PluginMeta
 from .plugins import find_disabled, scan_plugins
+from .sources import load_sources, source_for
 
 
 def _fmt_table(rows: list[list[str]], headers: list[str]) -> str:
@@ -121,6 +127,131 @@ def cmd_doctor(args) -> int:
     return 1
 
 
+def cmd_outdated(args) -> int:
+    mc = server_mc_version()
+    if not mc:
+        print("Could not determine server MC version (set MCM_MC_VERSION).", file=sys.stderr)
+        return 2
+    sources = load_sources()
+    metas = scan_plugins()
+    rows: list[list[str]] = []
+    available = 0
+    for m in sorted(metas, key=lambda x: (x.name or x.path.stem).lower()):
+        name = m.name or m.path.stem
+        installed = m.version or "?"
+        src = source_for(name, sources)
+        if src.kind == "modrinth" and src.id:
+            try:
+                cand = updates.modrinth_latest(src.id, mc)
+            except updates.SourceError as exc:
+                rows.append([name, installed, "-", f"modrinth error: {exc}"])
+                continue
+            if cand is None:
+                rows.append([name, installed, "-", f"no {mc} build on modrinth"])
+            elif updates.is_newer(cand.version_number, installed):
+                rows.append([name, installed, cand.version_number, "UPDATE AVAILABLE"])
+                available += 1
+            else:
+                rows.append([name, installed, cand.version_number, "up-to-date"])
+        elif src.kind == "local":
+            rows.append([name, installed, "-", "local (built from source)"])
+        elif src.kind in ("spigot", "github", "hangar", "manual"):
+            rows.append([name, installed, "-", f"{src.kind} (manual)" + (f" - {src.note}" if src.note else "")])
+        else:
+            rows.append([name, installed, "-", "no source configured (edit sources.yml)"])
+
+    print(f"# update check against Minecraft {mc}  ({plugins_dir()})")
+    print(_fmt_table(rows, ["NAME", "INSTALLED", "LATEST", "STATUS"]))
+    print(f"\n# {available} update(s) available via Modrinth. Apply with: mcm plugins update <name>  (or --all)")
+    return 0
+
+
+def _stage_update(meta: PluginMeta, cand: "updates.Candidate", dry_run: bool) -> bool:
+    """Download, verify, back up the current jar, and stage the new one into update/."""
+    upd = update_dir()
+    if dry_run:
+        print(f"  [dry-run] {meta.name}: {meta.version} -> {cand.version_number} "
+              f"(would stage {cand.filename} into {upd}, backing up {meta.path.name})")
+        return True
+    upd.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td) / cand.filename
+        size = updates.download(cand.url, tmp)
+        try:
+            with zipfile.ZipFile(tmp) as zf:
+                names = set(zf.namelist())
+        except zipfile.BadZipFile:
+            print(f"  ERROR {meta.name}: downloaded file is not a valid jar; skipped", file=sys.stderr)
+            return False
+        if not ({"plugin.yml", "paper-plugin.yml"} & names):
+            print(f"  ERROR {meta.name}: {cand.filename} has no plugin.yml; skipped", file=sys.stderr)
+            return False
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        bdir = backup_dir() / stamp
+        bdir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(meta.path, bdir / meta.path.name)
+        shutil.copy2(tmp, upd / cand.filename)
+    print(f"  {meta.name}: {meta.version} -> {cand.version_number}  staged {cand.filename} ({size:,} bytes)")
+    print(f"    backup: {bdir / meta.path.name}")
+    return True
+
+
+def cmd_update(args) -> int:
+    if not args.all and not args.name:
+        print("Specify a plugin name or --all.", file=sys.stderr)
+        return 2
+    mc = server_mc_version()
+    if not mc:
+        print("Could not determine server MC version (set MCM_MC_VERSION).", file=sys.stderr)
+        return 2
+    sources = load_sources()
+    metas = scan_plugins()
+    by_name = {(m.name or m.path.stem).lower(): m for m in metas}
+
+    if args.all:
+        targets = [m for m in metas if source_for(m.name or m.path.stem, sources).kind == "modrinth"]
+    else:
+        m = by_name.get(args.name.lower())
+        if not m:
+            print(f"No installed plugin named {args.name!r}", file=sys.stderr)
+            return 1
+        targets = [m]
+
+    staged = 0
+    for m in targets:
+        name = m.name or m.path.stem
+        src = source_for(name, sources)
+        if src.kind != "modrinth" or not src.id:
+            if not args.all:
+                print(f"{name}: no Modrinth source configured (kind={src.kind}).", file=sys.stderr)
+                return 1
+            continue
+        try:
+            cand = updates.modrinth_latest(src.id, mc)
+        except updates.SourceError as exc:
+            print(f"  {name}: {exc}", file=sys.stderr)
+            if not args.all:
+                return 1
+            continue
+        if cand is None:
+            print(f"  {name}: no build for MC {mc} on Modrinth", file=sys.stderr)
+            continue
+        if not args.force and not updates.is_newer(cand.version_number, m.version or ""):
+            if not args.all:
+                print(f"{name}: already up to date ({m.version}). Use --force to re-stage.")
+            continue
+        if _stage_update(m, cand, args.dry_run):
+            staged += 1
+
+    if args.dry_run:
+        print("\n# dry run - nothing changed.")
+    elif staged:
+        print(f"\n# staged {staged} update(s) into {update_dir()} - restart the server to apply.")
+    else:
+        print("# nothing to update.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="mcm", description="mcmanager - PaperMC server tooling")
     p.add_argument("--version", action="version", version=f"mcmanager {__version__}")
@@ -140,6 +271,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_doc = plsub.add_parser("doctor", help="check for plugin problems")
     p_doc.set_defaults(func=cmd_doctor)
+
+    p_out = plsub.add_parser("outdated", help="check installed plugins against Modrinth for the server MC version")
+    p_out.set_defaults(func=cmd_outdated)
+
+    p_upd = plsub.add_parser("update", help="download+backup+stage a plugin update into the update/ folder")
+    p_upd.add_argument("name", nargs="?", help="plugin name (omit with --all)")
+    p_upd.add_argument("--all", action="store_true", help="update every Modrinth-sourced plugin that's outdated")
+    p_upd.add_argument("--force", action="store_true", help="stage even if not detected as newer")
+    p_upd.add_argument("--dry-run", action="store_true", help="show what would happen without downloading")
+    p_upd.set_defaults(func=cmd_update)
 
     return p
 

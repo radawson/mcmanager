@@ -14,11 +14,25 @@ server host with no virtualenv or `pip install` required.
 Run from the repo directory via the `mcm` launcher:
 
 ```bash
-./mcm plugins list          # inventory every plugin jar (name, version, kind, api)
-./mcm plugins show <name>   # details for one plugin
-./mcm plugins doctor        # flag problems: dupes, unmet deps, unparseable jars
-./mcm plugins list --json   # machine-readable output
+./mcm plugins list             # inventory every plugin jar (name, version, kind, api)
+./mcm plugins show <name>      # details for one plugin
+./mcm plugins doctor           # flag problems: dupes, unmet deps, unparseable jars
+./mcm plugins list --json      # machine-readable output
+
+./mcm plugins outdated         # check installed plugins against Modrinth for the server's MC version
+./mcm plugins update <name>    # download + back up current + stage the update into plugins/update/
+./mcm plugins update --all     # stage every Modrinth-sourced plugin that's outdated
+./mcm plugins update <name> --dry-run
 ```
+
+`outdated`/`update` read the server's Minecraft version from `paper-current.jar`
+and consult **Modrinth** for each plugin (mapped in `mcmanager/sources.yml`).
+`update` never touches a running server destructively: it downloads the new jar,
+verifies it's a real plugin jar, copies the current one into a timestamped backup
+under `plugin-backups/mcmanager/`, and drops the new jar into Paper's `plugins/update/`
+folder — which swaps it in on the next restart. Plugins built from source
+(radawson's own) are marked `local` and skipped; SpigotMC/GitHub/Hangar ones are
+reported as manual.
 
 By default it looks at `/home/papercraft/papermc`. Override with environment
 variables:
